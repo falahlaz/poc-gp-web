@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GP Web Connect</title>
+</head>
+<body>
+<h1>GP Web Connect</h1>
+
+<p id="status">Status: memuat…</p>
+
+<p>
+  <button id="btn-connect">Connect</button>
+  <button id="btn-disconnect">Disconnect</button>
+  <button id="btn-refresh">Refresh status</button>
+</p>
+
+<div id="login" hidden>
+  <h2>1. Login SSO</h2>
+  <p>Buka link ini di browser laptop:</p>
+  <p><a id="login-link" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+  <p><button id="btn-copy">Copy</button> <span id="copy-msg"></span></p>
+</div>
+
+<h2>2. Paste callback</h2>
+<p>Setelah login, klik kanan link "click here" lalu Copy link (diawali <code>globalprotectcallback:</code>).
+<strong>Token berlaku sekitar 60 detik — langsung submit.</strong></p>
+<form id="cb-form">
+  <textarea id="cb-uri" rows="5" cols="80" autocomplete="off" spellcheck="false"
+    placeholder="globalprotectcallback:..."></textarea><br>
+  Mode:
+  <label><input type="radio" name="mode" value="keep" checked> keep</label>
+  <label><input type="radio" name="mode" value="stop-first"> stop-first</label>
+  <button type="submit" id="btn-submit">Submit</button>
+</form>
+
+<h2>Hasil command terakhir</h2>
+<pre id="result">-</pre>
+
+<h2>Log <button id="btn-logs">Refresh log</button></h2>
+<pre id="logs">-</pre>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (method === 'POST') {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body || {});
+  }
+  const res = await fetch(path, opts);
+  let data;
+  try { data = await res.json(); } catch { data = { error: await res.text() }; }
+  return { ok: res.ok, status: res.status, data };
+}
+
+function show(label, r) {
+  $('result').textContent = label + ' → HTTP ' + r.status + '\n' + JSON.stringify(r.data, null, 2);
+}
+
+async function refreshStatus() {
+  try {
+    const r = await api('GET', '/api/status');
+    const s = r.data;
+    const reach = (s.reach || []).map(x => x.host + '=' + (x.ok ? 'OK' : 'FAIL')).join(', ') || '-';
+    $('status').textContent =
+      'State: ' + s.state +
+      ' | gpStatus: ' + (s.gpStatus || '-').replace(/\s+/g, ' ') +
+      ' | iface: ' + ((s.iface || []).join(', ') || '-') +
+      ' | connect proc: ' + (s.connectAlive ? 'alive' : 'none') +
+      ' | reach: ' + reach;
+  } catch (e) {
+    $('status').textContent = 'Status error: ' + e;
+  }
+}
+
+async function refreshLogs() {
+  const r = await api('GET', '/api/logs');
+  $('logs').textContent = (r.data.lines || []).join('\n') || '-';
+}
+
+let pollTimer = null;
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+$('btn-connect').onclick = async () => {
+  stopPolling();
+  $('login').hidden = true;
+  const r = await api('POST', '/api/connect');
+  show('connect', r);
+  if (!r.ok) return;
+  const started = Date.now();
+  pollTimer = setInterval(async () => {
+    if (Date.now() - started > 60000) {
+      stopPolling();
+      $('result').textContent += '\n\nURL login tidak muncul dalam 60 detik. Cek log.';
+      refreshLogs();
+      return;
+    }
+    const u = await api('GET', '/api/login-url');
+    if (u.data.url) {
+      stopPolling();
+      $('login-link').href = u.data.url;
+      $('login-link').textContent = u.data.url;
+      $('login').hidden = false;
+      refreshStatus();
+    }
+  }, 1000);
+};
+
+$('btn-copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('login-link').href);
+    $('copy-msg').textContent = 'tersalin';
+  } catch {
+    $('copy-msg').textContent = 'gagal copy, salin manual';
+  }
+};
+
+$('cb-form').onsubmit = async (ev) => {
+  ev.preventDefault();
+  const uri = $('cb-uri').value.trim();
+  const mode = document.querySelector('input[name=mode]:checked').value;
+  $('cb-uri').value = ''; // jangan biarkan token tertinggal di halaman
+  if (!uri) return;
+  $('btn-submit').disabled = true;
+  $('result').textContent = 'launch-uri (' + mode + ') berjalan…';
+  try {
+    show('callback (' + mode + ')', await api('POST', '/api/callback', { uri, mode }));
+  } finally {
+    $('btn-submit').disabled = false;
+  }
+  refreshStatus();
+  refreshLogs();
+};
+
+$('btn-disconnect').onclick = async () => {
+  stopPolling();
+  $('login').hidden = true;
+  $('result').textContent = 'disconnect berjalan…';
+  show('disconnect', await api('POST', '/api/disconnect'));
+  refreshStatus();
+  refreshLogs();
+};
+
+$('btn-refresh').onclick = refreshStatus;
+$('btn-logs').onclick = refreshLogs;
+
+refreshStatus();
+refreshLogs();
+setInterval(refreshStatus, 3000);
+</script>
+</body>
+</html>

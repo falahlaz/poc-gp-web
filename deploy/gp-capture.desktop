@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=GP URL Capture
+NoDisplay=true
+# Ganti <user> dengan user Linux pemilik sesi GlobalProtect.
+Exec=/home/<user>/.gp-web/capture-url.sh %u
+MimeType=x-scheme-handler/http;x-scheme-handler/https;

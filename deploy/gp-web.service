@@ -1,0 +1,18 @@
+# systemd *user* unit. Pasang di ~/.config/systemd/user/gp-web.service, lalu:
+#   sudo loginctl enable-linger <user>
+#   systemctl --user daemon-reload && systemctl --user enable --now gp-web
+# User unit otomatis mewarisi XDG_RUNTIME_DIR dan DBUS_SESSION_BUS_ADDRESS,
+# dan tetap hidup walau tunnel SSH putus saat VPN naik.
+[Unit]
+Description=GP Web Connect (MVP)
+
+[Service]
+ExecStart=%h/.gp-web/gp-web
+Environment=BROWSER=%h/.gp-web/capture-url.sh
+Environment=GP_PORTAL=sasa.telkomsel.co.id
+Environment=GP_REACH_HOSTS=cicd-gitlab-ee.telkomsel.co.id:443
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
