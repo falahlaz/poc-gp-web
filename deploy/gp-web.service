@@ -9,6 +9,8 @@ Description=GP Web Connect (MVP)
 [Service]
 ExecStart=%h/.gp-web/gp-web
 Environment=BROWSER=%h/.gp-web/capture-url.sh
+# gpshow.sh only calls xdg-open when $DISPLAY contains ":" (no X server needed).
+Environment=DISPLAY=:0
 Environment=GP_PORTAL=sasa.telkomsel.co.id
 Environment=GP_REACH_HOSTS=cicd-gitlab-ee.telkomsel.co.id:443
 Restart=on-failure

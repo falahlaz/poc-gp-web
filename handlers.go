@@ -6,8 +6,20 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 )
+
+// samlFile reports whether the captured login value is a local SAML HTML file
+// written by GlobalProtect (gpshow.sh xdg-opens ~/GP_HTML/saml.html, not a URL).
+func samlFile(v string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(v) {
+		return false
+	}
+	return filepath.Dir(filepath.Clean(v)) == filepath.Join(home, "GP_HTML") && strings.HasSuffix(v, ".html")
+}
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -51,10 +63,30 @@ func newHandler(m *Manager, index []byte) http.Handler {
 	mux.HandleFunc("GET /api/login-url", func(w http.ResponseWriter, r *http.Request) {
 		st, url := m.LoginURL()
 		var u any
-		if url != "" {
+		if samlFile(url) {
+			u = "/saml-login"
+		} else if url != "" {
 			u = url
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"state": st, "url": u})
+	})
+
+	// The SAML page is an auto-submitting POST form; serve it so the laptop
+	// browser (via the SSH tunnel) can open it.
+	mux.HandleFunc("GET /saml-login", func(w http.ResponseWriter, r *http.Request) {
+		_, url := m.LoginURL()
+		if !samlFile(url) {
+			http.NotFound(w, r)
+			return
+		}
+		b, err := os.ReadFile(url)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write(b)
 	})
 
 	mux.HandleFunc("POST /api/callback", func(w http.ResponseWriter, r *http.Request) {

@@ -300,7 +300,9 @@ type CallbackResult struct {
 	ConnectStopped *bool `json:"connectStopped,omitempty"`
 }
 
-// Callback hands the pasted callback URI to `globalprotect launch-uri`.
+// Callback hands the pasted callback URI to `globalprotect defaultbrowser`
+// (GP 6.1.x has no launch-uri): it writes ~/GP_HTML/defaultbrowser/resp.html,
+// which PanGPA watches via inotify. The connect process must stay alive.
 func (m *Manager) Callback(uri, mode string) (CallbackResult, error) {
 	if err := validateCallback(uri, mode); err != nil {
 		return CallbackResult{State: m.State()}, err
@@ -316,18 +318,18 @@ func (m *Manager) Callback(uri, mode string) (CallbackResult, error) {
 	if mode == "stop-first" {
 		ok := m.stopConnect(false)
 		stopped = &ok
-		extra = append(extra, fmt.Sprintf("mode=stop-first, connect exited before launch-uri: %v", ok))
+		extra = append(extra, fmt.Sprintf("mode=stop-first, connect exited before defaultbrowser: %v", ok))
 	} else {
 		extra = append(extra, fmt.Sprintf("mode=keep, connect alive: %v", m.connectAlive()))
 	}
 
-	res := m.run(launchURITimeout, uri, "launch-uri", uri)
+	res := m.run(launchURITimeout, uri, "defaultbrowser", uri)
 	st := StateFailed
 	if res.ExitCode == 0 {
 		st = StateConnected
 	}
 	m.setState(st)
-	m.record("launch-uri <callback-uri>", res, extra...)
+	m.record("defaultbrowser <callback-uri>", res, extra...)
 	return CallbackResult{CmdResult: res, State: st, ConnectStopped: stopped}, nil
 }
 

@@ -125,7 +125,7 @@ $('cb-form').onsubmit = async (ev) => {
   $('cb-uri').value = ''; // jangan biarkan token tertinggal di halaman
   if (!uri) return;
   $('btn-submit').disabled = true;
-  $('result').textContent = 'launch-uri (' + mode + ') berjalan…';
+  $('result').textContent = 'defaultbrowser (' + mode + ') berjalan…';
   try {
     show('callback (' + mode + ')', await api('POST', '/api/callback', { uri, mode }));
   } finally {
