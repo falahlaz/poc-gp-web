@@ -1,6 +1,6 @@
 # GP Web Connect — MVP
 
-Web app kecil (Go, satu binary, tanpa dependency) untuk menguji apakah GlobalProtect CLI di server headless bisa tersambung ke `sasa.telkomsel.co.id` dengan login SAML di browser laptop: URL login ditangkap server, callback `globalprotectcallback:...` di-paste manual, lalu diteruskan ke `globalprotect launch-uri`.
+Web app kecil (Go, satu binary, tanpa dependency) untuk menguji apakah GlobalProtect CLI di server headless bisa tersambung ke `sasa.telkomsel.co.id` dengan login SAML di browser laptop: URL login ditangkap server, callback `globalprotectcallback:...` di-paste manual, lalu diteruskan ke `globalprotect defaultbrowser` (GP 6.1.x tidak punya `launch-uri`; callback ditulis ke `~/GP_HTML/defaultbrowser/resp.html` dan dibaca PanGPA, jadi proses `connect` harus tetap hidup → pakai mode `keep`).
 
 ## Build
 
@@ -42,6 +42,13 @@ cat ~/.gp-web/login-url    # harus URL https://, buka di browser laptop → hala
 
 Kalau file kosong dan muncul "There is not default browser", telusuri dengan `strace -f -e trace=execve globalprotect connect ...`.
 
+Catatan GP 6.1.4 (hasil uji di server):
+- `gpshow.sh` hanya memanggil `xdg-open` kalau `$DISPLAY` mengandung `:`. Unit service men-set `DISPLAY=:0` (tidak perlu X server); untuk pre-check manual tambahkan `DISPLAY=:0`.
+- Yang di-capture bukan URL https, tapi file lokal `~/GP_HTML/saml.html` (form POST auto-submit ke cloud-auth). Web app menyajikannya di `/saml-login`.
+- Tidak ada `launch-uri`. Callback dikirim lewat `globalprotect defaultbrowser <uri>` (handler `globalprotectcallback:` di paket UI), yang menulis `~/GP_HTML/defaultbrowser/resp.html`; PanGPA membacanya via inotify. Proses `connect` harus tetap hidup → pakai mode `keep`.
+- CLI menolak jalan ("already established ...") selama ada proses `globalprotect` lain milik user yang sama, atau selama daemon masih di state "Retrieving configuration...".
+- Kalau `connect` dimatikan sebelum login selesai (Disconnect saat WAITING_CALLBACK, mode `stop-first`), daemon bisa nyangkut di "Retrieving configuration..." dan semua `connect` berikutnya ditolak. Pulihkan dengan `sudo systemctl restart gpd && systemctl --user restart gpa`.
+
 ### Jalankan web app
 
 ```sh
@@ -61,7 +68,7 @@ Kembalikan default browser: `xdg-settings set default-web-browser firefox-esr.de
 2. Buka link di laptop, login SSO, klik kanan "click here" → Copy link.
 3. Paste ke textarea, pilih mode, **Submit** dalam ±60 detik.
    - `keep`: proses `connect` dibiarkan hidup (mengulang percobaan manual).
-   - `stop-first`: `connect` dikirim SIGINT dan ditunggu maks 3 detik dulu.
+   - `stop-first`: `connect` dikirim SIGINT dan ditunggu maks 3 detik dulu. **Jangan dipakai di GP 6.1.x**: PanGPA butuh sesi `connect` yang masih hidup.
 4. Cek baris status: `gpStatus` Connected, interface `gpd*`/`tun*`, reach OK.
 
 ## API
@@ -76,11 +83,11 @@ Kembalikan default browser: `xdg-settings set default-web-browser firefox-esr.de
 | `POST /api/disconnect` | `{exitCode, stdout, stderr}`; state → IDLE |
 | `GET /api/logs` | `{lines}`: 200 baris terakhir `connect.log` + hasil command terakhir |
 
-State: `IDLE → CONNECTING → WAITING_CALLBACK → SUBMITTING → CONNECTED | FAILED`. `CONNECTED`/`FAILED` ditentukan dari exit code `launch-uri`; bukti sebenarnya ada di `/api/status`.
+State: `IDLE → CONNECTING → WAITING_CALLBACK → SUBMITTING → CONNECTED | FAILED`. `CONNECTED`/`FAILED` ditentukan dari exit code `defaultbrowser`; bukti sebenarnya ada di `/api/status`.
 
 ## Keamanan
 
-- Command dijalankan dengan `exec.CommandContext` dan argumen terpisah (tanpa shell), dengan timeout (`show --status` 5s, `launch-uri` 30s, `disconnect` 15s).
+- Command dijalankan dengan `exec.CommandContext` dan argumen terpisah (tanpa shell), dengan timeout (`show --status` 5s, `defaultbrowser` 30s, `disconnect` 15s).
 - Hanya PID `connect` yang di-spawn server yang di-signal (tidak ada `pkill`).
 - `token=`, `prelogin-cookie=`, `portal-userauthcookie=` di-redact sebelum masuk `connect.log`, log server, dan respons; URI callback tidak pernah ditulis ke disk.
 - Bind `127.0.0.1` saja; request dengan `Host` non-loopback ditolak dan POST wajib `Content-Type: application/json` (proteksi DNS-rebinding/CSRF).
@@ -96,9 +103,9 @@ GP_BIN=$PWD/testdata/fake-globalprotect.sh GP_WEB_DIR=/tmp/gpw BROWSER=/tmp/gpw/
 
 | # | Skenario | Diharapkan | Aktual |
 | --- | --- | --- | --- |
-| 1 | Pre-check H1: klik Connect | URL login ≤ 10 detik | |
-| 2 | H2+H3 mode `keep` | Connected, atau "already established" | |
-| 3 | H2+H3 mode `stop-first` | Connected | |
-| 4 | Token kedaluwarsa (> 60 detik) | error `launch-uri`, state FAILED, server sehat | |
+| 1 | Pre-check H1: klik Connect | URL login ≤ 10 detik | OK: ±3 detik, setelah `DISPLAY=:0` + `/saml-login` (2026-10-01) |
+| 2 | H2+H3 mode `keep` | Connected, atau "already established" | OK via `defaultbrowser`: Connected, `gpd0` UP, reach OK (2026-10-01) |
+| 3 | H2+H3 mode `stop-first` | Connected | Tidak berlaku di 6.1.4: `connect` mati → daemon nyangkut |
+| 4 | Token kedaluwarsa (> 60 detik) | error di PanGPA.log, state FAILED, server sehat | |
 | 5 | Disconnect saat Connected | Disconnected, interface hilang | |
 | 6 | Reconnect (#3 setelah #5) | Connected tanpa restart `gpd` | |

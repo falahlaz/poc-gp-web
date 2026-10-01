@@ -8,7 +8,7 @@ connect)
 	trap 'echo "connect interrupted"; exit 130' INT
 	while :; do sleep 0.1; done
 	;;
-launch-uri)
+defaultbrowser)
 	case "$2" in
 	*expired*)
 		echo "Error: token=supersecret expired for $2" >&2
