@@ -1,6 +1,6 @@
 # GP Web Connect — MVP
 
-Web app kecil (Go, satu binary, tanpa dependency) untuk menguji apakah GlobalProtect CLI di server headless bisa tersambung ke `sasa.telkomsel.co.id` dengan login SAML di browser laptop: URL login ditangkap server, callback `globalprotectcallback:...` di-paste manual, lalu diteruskan ke `globalprotect defaultbrowser` (GP 6.1.x tidak punya `launch-uri`; callback ditulis ke `~/GP_HTML/defaultbrowser/resp.html` dan dibaca PanGPA, jadi proses `connect` harus tetap hidup → pakai mode `keep`).
+Web app kecil (Go, satu binary, tanpa dependency) untuk menguji apakah GlobalProtect CLI di server headless bisa tersambung ke portal VPN dengan login SAML di browser laptop: URL login ditangkap server, callback `globalprotectcallback:...` di-paste manual, lalu diteruskan ke `globalprotect defaultbrowser` (GP 6.1.x tidak punya `launch-uri`; callback ditulis ke `~/GP_HTML/defaultbrowser/resp.html` dan dibaca PanGPA, jadi proses `connect` harus tetap hidup → pakai mode `keep`).
 
 ## Build
 
@@ -14,8 +14,8 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o gp-web .
 | Env | Default |
 | --- | --- |
 | `GP_BIN` | `/usr/bin/globalprotect` |
-| `GP_PORTAL` | `sasa.telkomsel.co.id` |
-| `GP_REACH_HOSTS` | `cicd-gitlab-ee.telkomsel.co.id:443` (dipisah koma) |
+| `GP_PORTAL` | wajib, mis. `vpn.example.com` |
+| `GP_REACH_HOSTS` | kosong; `host:port` dipisah koma, mis. `gitlab.example.com:443` |
 | `GP_PORT` | `8080` (selalu bind ke `127.0.0.1`) |
 | `GP_WEB_DIR` | `~/.gp-web` (`login-url`, `connect.log`) |
 | `BROWSER` | `$GP_WEB_DIR/capture-url.sh` (diteruskan ke proses `connect`) |
@@ -36,7 +36,7 @@ xdg-settings set default-web-browser gp-capture.desktop
 
 ```sh
 globalprotect disconnect; timeout 5 globalprotect show --status   # harus Disconnected
-BROWSER=~/.gp-web/capture-url.sh globalprotect connect --portal sasa.telkomsel.co.id
+BROWSER=~/.gp-web/capture-url.sh globalprotect connect --portal <portal>
 cat ~/.gp-web/login-url    # harus URL https://, buka di browser laptop → halaman SSO
 ```
 

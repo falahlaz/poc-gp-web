@@ -32,14 +32,18 @@ func loadConfig() Config {
 	}
 	dir := getenv("GP_WEB_DIR", filepath.Join(home, ".gp-web"))
 	var hosts []string
-	for _, h := range strings.Split(getenv("GP_REACH_HOSTS", "cicd-gitlab-ee.telkomsel.co.id:443"), ",") {
+	for _, h := range strings.Split(getenv("GP_REACH_HOSTS", ""), ",") {
 		if h = strings.TrimSpace(h); h != "" {
 			hosts = append(hosts, h)
 		}
 	}
+	portal := getenv("GP_PORTAL", "")
+	if portal == "" {
+		log.Fatal("GP_PORTAL is required")
+	}
 	return Config{
 		Bin:        getenv("GP_BIN", "/usr/bin/globalprotect"),
-		Portal:     getenv("GP_PORTAL", "sasa.telkomsel.co.id"),
+		Portal:     portal,
 		Dir:        dir,
 		Browser:    getenv("BROWSER", filepath.Join(dir, "capture-url.sh")),
 		ReachHosts: hosts,
